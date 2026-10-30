@@ -1,0 +1,169 @@
+<Window x:Class="Audiocal.AudioSpectrumSettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Audio Spectrum"
+        Width="360"
+        Height="290"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Foreground="{DynamicResource PrimaryTextBrush}"
+        FontFamily="Segoe UI"
+        WindowStartupLocation="Manual">
+    <Window.Resources>
+        <SolidColorBrush x:Key="PanelBrush" Color="#171E1B"/>
+        <SolidColorBrush x:Key="PanelRaisedBrush" Color="#202925"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#43D9A3"/>
+        <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F1F5F3"/>
+        <SolidColorBrush x:Key="TextMutedBrush" Color="#91A19A"/>
+        <SolidColorBrush x:Key="ControlBorderBrush" Color="#35423B"/>
+        <Style TargetType="{x:Type TextBlock}">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="{x:Type Slider}">
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+            <Setter Property="IsMoveToPointEnabled" Value="True"/>
+            <Setter Property="Height" Value="34"/>
+        </Style>
+        <Style x:Key="SpectrumToggleStyle" TargetType="{x:Type ToggleButton}">
+            <Setter Property="Width" Value="44"/>
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                        <Border x:Name="ToggleTrack"
+                                Background="{DynamicResource PanelRaisedBrush}"
+                                BorderBrush="{DynamicResource ControlBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12">
+                            <Ellipse x:Name="ToggleThumb"
+                                     Width="16"
+                                     Height="16"
+                                     Fill="{DynamicResource TextMutedBrush}"
+                                     HorizontalAlignment="Left"
+                                     Margin="3"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="ToggleTrack"
+                                        Property="Background"
+                                        Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="ToggleTrack"
+                                        Property="BorderBrush"
+                                        Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="ToggleThumb"
+                                        Property="HorizontalAlignment"
+                                        Value="Right"/>
+                                <Setter TargetName="ToggleThumb"
+                                        Property="Fill"
+                                        Value="{DynamicResource PanelBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ToggleTrack"
+                                        Property="BorderBrush"
+                                        Value="{DynamicResource AccentBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    <Border BorderBrush="{DynamicResource ControlBorderBrush}"
+            BorderThickness="1"
+            Background="{DynamicResource PanelBrush}"
+            CornerRadius="16"
+            Padding="16"
+            ClipToBounds="True">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Grid MouseLeftButtonDown="Header_MouseLeftButtonDown">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Audio Spectrum" FontSize="19" FontWeight="Bold"/>
+                    <TextBlock Text="Set pre-analysis and spectrum circle sizes."
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               FontSize="11"
+                               Margin="0,3,0,0"/>
+                </StackPanel>
+                <Button Grid.Column="1"
+                        Width="30"
+                        Height="30"
+                        Padding="0"
+                        Background="Transparent"
+                        BorderBrush="Transparent"
+                        Click="CloseButton_Click">
+                    <Button.Template>
+                        <ControlTemplate TargetType="{x:Type Button}">
+                            <Border Background="Transparent">
+                                <Path x:Name="CloseGlyph"
+                                      Data="M5,5 L19,19 M19,5 L5,19"
+                                      Width="18"
+                                      Height="18"
+                                      Stretch="Uniform"
+                                      Stroke="{DynamicResource PrimaryTextBrush}"
+                                      StrokeThickness="2"
+                                      StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="CloseGlyph"
+                                            Property="Stroke"
+                                            Value="{DynamicResource AccentBrush}"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </Grid>
+            <StackPanel Grid.Row="1" Margin="4,18,4,0">
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="Pre-analyze before play"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"/>
+                        <TextBlock Text="Analyze and cache audio before playback starts."
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="10"
+                                   Margin="0,3,8,0"/>
+                    </StackPanel>
+                    <ToggleButton x:Name="PreAnalyzeToggleButton"
+                                  Grid.Column="1"
+                                  Style="{StaticResource SpectrumToggleStyle}"
+                                  VerticalAlignment="Center"
+                                  ToolTip="Toggle song pre-analysis"
+                                  Click="PreAnalyzeToggleButton_Click"/>
+                </Grid>
+                <TextBlock Text="Circle size"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           FontSize="11"
+                           Margin="0,8,0,0"/>
+                <Slider Minimum="50" Maximum="180" TickFrequency="5"
+                        Value="{Binding CircleSize, Mode=TwoWay}"/>
+                <TextBlock Text="Underlying circles size"
+                           Foreground="{DynamicResource TextMutedBrush}"
+                           FontSize="11"
+                           Margin="0,8,0,0"/>
+                <Slider Minimum="50" Maximum="180" TickFrequency="5"
+                        Value="{Binding UnderlayCircleSize, Mode=TwoWay}"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

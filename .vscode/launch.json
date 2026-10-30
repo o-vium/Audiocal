@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Audiocal",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build Audiocal",
+      "program": "${workspaceFolder}\\Audiocal\\bin\\Debug\\net8.0-windows\\Audiocal.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}\\Audiocal",
+      "console": "internalConsole",
+      "stopAtEntry": false
+    }
+  ]
+}
