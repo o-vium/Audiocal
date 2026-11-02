@@ -6,6 +6,8 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Controls;
+using System.Windows.Data;
+using System.Text.Json.Serialization;
 
 namespace Audiocal
 {
@@ -13,6 +15,9 @@ namespace Audiocal
     {
         private const double ColorOptionRowHeight = 36;
         private const double NonListWindowHeight = 142;
+        private const double ProfileListHeight = 300;
+        private bool isProfileListVisible;
+        private bool isUpdatingPalettes;
 
         public static IReadOnlyDictionary<string, string> DefaultColors { get; } =
             new Dictionary<string, string>
@@ -36,19 +41,27 @@ namespace Audiocal
 
         public ObservableCollection<ThemeColorOption> StandardColors { get; } = new();
         public ObservableCollection<ThemeColorOption> MiniPlayerColors { get; } = new();
+        public ObservableCollection<ThemeColorProfile> Profiles { get; }
 
         public event Action<bool, string, Color>? ThemeColorChanged;
         public event Action<bool>? PaletteSelectionChanged;
         public event Action<bool, string?>? ColorNameHoverChanged;
+        public event Action? ProfileAddRequested;
+        public event Action<ThemeColorProfile>? ProfileSelected;
+        public event Action<ThemeColorProfile>? ProfileNameChanged;
+        public event Action<ThemeColorProfile>? ProfileDeleteRequested;
         public bool IsMiniPlayerPaletteSelected => PaletteTabControl.SelectedIndex == 1;
 
         public ThemeSettingsWindow(
             IReadOnlyDictionary<string, string> standardColors,
             IReadOnlyDictionary<string, string> miniPlayerColors,
-            bool initiallySelectedMiniPlayerPalette)
+            bool initiallySelectedMiniPlayerPalette,
+            IEnumerable<ThemeColorProfile> profiles)
         {
             InitializeComponent();
+            Profiles = new ObservableCollection<ThemeColorProfile>(profiles);
             DataContext = this;
+            SetActiveProfile(Profiles.FirstOrDefault(profile => profile.IsActive));
             Resources["PanelBrush"] = CreateBrush(standardColors, "PanelBrush");
             Resources["PanelRaisedBrush"] = CreateBrush(standardColors, "PanelRaisedBrush");
             Resources["AccentBrush"] = CreateBrush(standardColors, "AccentBrush");
@@ -100,6 +113,14 @@ namespace Audiocal
 
         private void UpdateWindowHeight()
         {
+            if (isProfileListVisible)
+            {
+                Height = NonListWindowHeight + ProfileListHeight;
+                MinHeight = Height;
+                MaxHeight = Height;
+                return;
+            }
+
             int colorCount = IsMiniPlayerPaletteSelected
                 ? MiniPlayerColors.Count
                 : StandardColors.Count;
@@ -142,11 +163,205 @@ namespace Audiocal
                         TryParseColor(option.Hex, out Color color))
                     {
                         option.PreviewBrush = new SolidColorBrush(color);
-                        ThemeColorChanged?.Invoke(isMiniPlayer, key, color);
+                        if (!isUpdatingPalettes)
+                        {
+                            ThemeColorChanged?.Invoke(isMiniPlayer, key, color);
+                        }
                     }
                 };
                 colors.Add(option);
             }
+        }
+
+        public string GetNextProfileName()
+        {
+            int profileNumber = 1;
+            string name;
+            do
+            {
+                name = $"Profile {profileNumber++}";
+            }
+            while (Profiles.Any(profile =>
+                string.Equals(profile.Name, name, StringComparison.OrdinalIgnoreCase)));
+
+            return name;
+        }
+
+        public void ShowProfileList()
+        {
+            isProfileListVisible = true;
+            PaletteTabControl.Visibility = Visibility.Collapsed;
+            ProfilePanel.Visibility = Visibility.Visible;
+            ProfileButton.Content = "Colors";
+            UpdateWindowHeight();
+        }
+
+        public void SetActiveProfile(ThemeColorProfile? activeProfile)
+        {
+            foreach (ThemeColorProfile profile in Profiles)
+            {
+                profile.IsActive = ReferenceEquals(profile, activeProfile);
+            }
+
+            ActiveProfileText.Text = activeProfile == null
+                ? "Active profile: None"
+                : $"Active profile: {activeProfile.Name}";
+        }
+
+        public void SetPalettes(
+            IReadOnlyDictionary<string, string> standardColors,
+            IReadOnlyDictionary<string, string> miniPlayerColors)
+        {
+            isUpdatingPalettes = true;
+            try
+            {
+                UpdatePalette(StandardColors, standardColors);
+                UpdatePalette(MiniPlayerColors, miniPlayerColors);
+            }
+            finally
+            {
+                isUpdatingPalettes = false;
+            }
+        }
+
+        private static void UpdatePalette(
+            IEnumerable<ThemeColorOption> options,
+            IReadOnlyDictionary<string, string> palette)
+        {
+            foreach (ThemeColorOption option in options)
+            {
+                if (palette.TryGetValue(option.Key, out string? color))
+                {
+                    option.Hex = color;
+                }
+            }
+        }
+
+        private void ProfileButton_Click(object sender, RoutedEventArgs e)
+        {
+            isProfileListVisible = !isProfileListVisible;
+            PaletteTabControl.Visibility = isProfileListVisible
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+            ProfilePanel.Visibility = isProfileListVisible
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            ProfileButton.Content = isProfileListVisible ? "Colors" : "Profile";
+            UpdateWindowHeight();
+        }
+
+        private void AddProfileButton_Click(object sender, RoutedEventArgs e)
+        {
+            ProfileAddRequested?.Invoke();
+        }
+
+        private void UseProfileButton_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is ThemeColorProfile profile)
+            {
+                ProfileSelected?.Invoke(profile);
+            }
+        }
+
+        private void RenameProfileMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (GetProfileFromMenuItem(sender) is not ThemeColorProfile profile)
+            {
+                return;
+            }
+
+            profile.IsRenaming = true;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (FindVisualChild<TextBox>(
+                        (DependencyObject?)ProfileItemsControl?.ItemContainerGenerator
+                            .ContainerFromItem(profile)) is TextBox textBox)
+                {
+                    textBox.Focus();
+                    textBox.SelectAll();
+                }
+            }));
+        }
+
+        private void DeleteProfileMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (GetProfileFromMenuItem(sender) is ThemeColorProfile profile)
+            {
+                ProfileDeleteRequested?.Invoke(profile);
+            }
+        }
+
+        private void ProfileName_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (sender is not TextBox textBox ||
+                textBox.DataContext is not ThemeColorProfile profile)
+            {
+                return;
+            }
+
+            textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+            if (string.IsNullOrWhiteSpace(profile.Name))
+            {
+                profile.Name = GetNextProfileName();
+            }
+
+            profile.IsRenaming = false;
+            ProfileNameChanged?.Invoke(profile);
+        }
+
+        private void ProfileName_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (sender is not TextBox textBox ||
+                textBox.DataContext is not ThemeColorProfile profile)
+            {
+                return;
+            }
+
+            if (e.Key == Key.Enter)
+            {
+                textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+                profile.IsRenaming = false;
+                ProfileNameChanged?.Invoke(profile);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateTarget();
+                profile.IsRenaming = false;
+                e.Handled = true;
+            }
+        }
+
+        private static ThemeColorProfile? GetProfileFromMenuItem(object sender)
+        {
+            return (sender as MenuItem)?.Parent is ContextMenu contextMenu
+                ? (contextMenu.PlacementTarget as FrameworkElement)?.DataContext as ThemeColorProfile
+                : null;
+        }
+
+        private static T? FindVisualChild<T>(DependencyObject? parent)
+            where T : DependencyObject
+        {
+            if (parent == null)
+            {
+                return null;
+            }
+
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(parent, i);
+                if (child is T result)
+                {
+                    return result;
+                }
+
+                if (FindVisualChild<T>(child) is T descendant)
+                {
+                    return descendant;
+                }
+            }
+
+            return null;
         }
 
         private static SolidColorBrush CreateBrush(
@@ -260,6 +475,81 @@ namespace Audiocal
 
             field = value;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    public sealed class ThemeColorProfile : INotifyPropertyChanged
+    {
+        private string name = "";
+        private bool isActive;
+        private bool isRenaming;
+
+        public Guid Id { get; set; } = Guid.NewGuid();
+
+        public string Name
+        {
+            get => name;
+            set
+            {
+                if (name == value)
+                {
+                    return;
+                }
+
+                name = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
+            }
+        }
+
+        public Dictionary<string, string> StandardColors { get; set; } = new();
+        public Dictionary<string, string> MiniPlayerColors { get; set; } = new();
+
+        [JsonIgnore]
+        public bool IsActive
+        {
+            get => isActive;
+            set
+            {
+                if (isActive == value)
+                {
+                    return;
+                }
+
+                isActive = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsActive)));
+            }
+        }
+
+        [JsonIgnore]
+        public bool IsRenaming
+        {
+            get => isRenaming;
+            set
+            {
+                if (isRenaming == value)
+                {
+                    return;
+                }
+
+                isRenaming = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsRenaming)));
+            }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        public ThemeColorProfile()
+        {
+        }
+
+        public ThemeColorProfile(
+            string name,
+            Dictionary<string, string> standardColors,
+            Dictionary<string, string> miniPlayerColors)
+        {
+            Name = name;
+            StandardColors = standardColors;
+            MiniPlayerColors = miniPlayerColors;
         }
     }
 

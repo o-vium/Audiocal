@@ -24,6 +24,43 @@
         <SolidColorBrush x:Key="AudioSpectrumRedBrush" Color="#FF0000"/>
         <SolidColorBrush x:Key="AudioSpectrumBlueBrush" Color="#0000FF"/>
         <SolidColorBrush x:Key="AudioSpectrumIconBrush" Color="#43D9A3"/>
+        <Style TargetType="{x:Type Button}">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource PanelRaisedBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="9,5"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Button}">
+                        <Border x:Name="ButtonBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder"
+                                        Property="BorderBrush"
+                                        Value="{DynamicResource AccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder"
+                                        Property="Background"
+                                        Value="{DynamicResource ControlBorderBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <DataTemplate x:Key="ColorOptionTemplate">
             <Grid Margin="0,3">
                 <Grid.ColumnDefinitions>
@@ -158,6 +195,73 @@
                 </Popup>
             </Grid>
         </DataTemplate>
+        <DataTemplate x:Key="ThemeProfileTemplate">
+            <Border Margin="0,3"
+                    Padding="8,5"
+                    CornerRadius="7">
+                <Border.ContextMenu>
+                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                        <MenuItem Header="Rename" Click="RenameProfileMenuItem_Click"/>
+                        <MenuItem Header="Delete" Click="DeleteProfileMenuItem_Click"/>
+                    </ContextMenu>
+                </Border.ContextMenu>
+                <Border.Style>
+                    <Style TargetType="{x:Type Border}">
+                        <Setter Property="Background" Value="{DynamicResource PanelBrush}"/>
+                        <Setter Property="BorderBrush" Value="Transparent"/>
+                        <Setter Property="BorderThickness" Value="1"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter Property="Background" Value="{DynamicResource PanelRaisedBrush}"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="58"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid>
+                        <TextBlock Text="{Binding Name}"
+                                   VerticalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="{x:Type TextBlock}">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsRenaming}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBox x:Name="ProfileNameTextBox"
+                                 Text="{Binding Name, UpdateSourceTrigger=LostFocus}"
+                                 MaxLength="40"
+                                 LostFocus="ProfileName_LostFocus"
+                                 KeyDown="ProfileName_KeyDown">
+                            <TextBox.Style>
+                                <Style TargetType="{x:Type TextBox}">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsRenaming}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
+                    </Grid>
+                    <Button Grid.Column="1"
+                            Content="Use"
+                            Margin="6,0,0,0"
+                            Padding="6,3"
+                            Click="UseProfileButton_Click"/>
+                </Grid>
+            </Border>
+        </DataTemplate>
         <Style TargetType="{x:Type TextBlock}">
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
@@ -246,12 +350,26 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel>
                     <TextBlock Text="Settings" FontSize="19" FontWeight="Bold"/>
-                    <TextBlock Text="Customize the application colors"
-                               Foreground="{DynamicResource TextMutedBrush}"
-                               FontSize="11"
-                               Margin="0,3,0,0"/>
+                    <StackPanel>
+                        <TextBlock Text="Customize the application colors"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="11"
+                                   Margin="0,3,0,0"/>
+                        <TextBlock x:Name="ActiveProfileText"
+                                   Text="Active profile: None"
+                                   Foreground="{DynamicResource AccentBrush}"
+                                   FontSize="10"
+                                   Margin="0,4,0,0"/>
+                    </StackPanel>
                 </StackPanel>
-                <Button Grid.Column="1"
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="ProfileButton"
+                            Content="Profile"
+                            Margin="0,0,8,0"
+                            Padding="10,5"
+                            VerticalAlignment="Center"
+                            Click="ProfileButton_Click"/>
+                    <Button
                         Width="30"
                         Height="30"
                         Padding="0"
@@ -283,6 +401,7 @@
                             </ControlTemplate>
                         </Button.Template>
                     </Button>
+                </StackPanel>
             </Grid>
             <TabControl x:Name="PaletteTabControl"
                         Grid.Row="1"
@@ -301,6 +420,44 @@
                     </ScrollViewer>
                 </TabItem>
             </TabControl>
+            <Grid x:Name="ProfilePanel"
+                  Grid.Row="1"
+                  Margin="0,12,0,0"
+                  Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid>
+                        <ItemsControl x:Name="ProfileItemsControl"
+                                      ItemsSource="{Binding Profiles}"
+                                      ItemTemplate="{StaticResource ThemeProfileTemplate}"/>
+                        <TextBlock Text="No saved profiles yet"
+                                   Foreground="{DynamicResource TextMutedBrush}"
+                                   FontSize="12"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="{x:Type TextBlock}">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Profiles.Count}" Value="0">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
+                </ScrollViewer>
+                <Button Grid.Row="1"
+                        Content="Add new profile"
+                        Margin="0,10,0,0"
+                        Padding="10,7"
+                        HorizontalAlignment="Stretch"
+                        Click="AddProfileButton_Click"/>
+            </Grid>
         </Grid>
     </Border>
 </Window>

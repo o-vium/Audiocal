@@ -1550,6 +1550,7 @@ namespace Audiocal
         {
             savedSettings.ThemeColors ??= new Dictionary<string, string>();
             savedSettings.MiniPlayerThemeColors ??= new Dictionary<string, string>();
+            savedSettings.ThemeProfiles ??= new List<ThemeColorProfile>();
             savedSettings.AudioSpectrum ??= new AudioSpectrumOptions();
             savedSettings.ThemeColors.Remove("InputBackgroundBrush");
             foreach ((string key, string defaultColor) in ThemeSettingsWindow.DefaultColors)
@@ -1565,6 +1566,50 @@ namespace Audiocal
                 {
                     savedSettings.MiniPlayerThemeColors[key] = savedSettings.ThemeColors[key];
                 }
+            }
+
+            savedSettings.ThemeProfiles.RemoveAll(profile => profile == null);
+            foreach (ThemeColorProfile profile in savedSettings.ThemeProfiles)
+            {
+                if (profile.Id == Guid.Empty)
+                {
+                    profile.Id = Guid.NewGuid();
+                }
+
+                profile.StandardColors ??= new Dictionary<string, string>();
+                profile.MiniPlayerColors ??= new Dictionary<string, string>();
+                foreach ((string key, string _) in ThemeSettingsWindow.DefaultColors)
+                {
+                    if (!profile.StandardColors.TryGetValue(key, out string? standardColor) ||
+                        !ThemeSettingsWindow.TryParseColor(standardColor, out _))
+                    {
+                        profile.StandardColors[key] = savedSettings.ThemeColors[key];
+                    }
+
+                    if (!profile.MiniPlayerColors.TryGetValue(key, out string? miniPlayerColor) ||
+                        !ThemeSettingsWindow.TryParseColor(miniPlayerColor, out _))
+                    {
+                        profile.MiniPlayerColors[key] = savedSettings.MiniPlayerThemeColors[key];
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(profile.Name))
+                {
+                    profile.Name = "Profile";
+                }
+            }
+
+            ThemeColorProfile? activeProfile = savedSettings.ThemeProfiles.FirstOrDefault(
+                profile => profile.Id == savedSettings.ActiveThemeProfileId);
+            if (activeProfile == null)
+            {
+                savedSettings.ActiveThemeProfileId = null;
+            }
+            else
+            {
+                savedSettings.ThemeColors = new Dictionary<string, string>(activeProfile.StandardColors);
+                savedSettings.MiniPlayerThemeColors =
+                    new Dictionary<string, string>(activeProfile.MiniPlayerColors);
             }
         }
         private void ApplyThemeColors()
@@ -1799,11 +1844,71 @@ namespace Audiocal
             var settingsWindow = new ThemeSettingsWindow(
                 savedSettings.ThemeColors,
                 savedSettings.MiniPlayerThemeColors,
-                isMiniPlayerEnabled)
+                isMiniPlayerEnabled,
+                savedSettings.ThemeProfiles)
             {
                 Owner = this
             };
             themeSettingsWindow = settingsWindow;
+            settingsWindow.SetActiveProfile(savedSettings.ThemeProfiles.FirstOrDefault(
+                profile => profile.Id == savedSettings.ActiveThemeProfileId));
+            settingsWindow.ProfileAddRequested += () =>
+            {
+                var profile = new ThemeColorProfile(
+                    settingsWindow.GetNextProfileName(),
+                    new Dictionary<string, string>(savedSettings.ThemeColors),
+                    new Dictionary<string, string>(savedSettings.MiniPlayerThemeColors));
+                savedSettings.ThemeProfiles.Add(profile);
+                settingsWindow.Profiles.Add(profile);
+                savedSettings.ActiveThemeProfileId = profile.Id;
+                settingsWindow.SetActiveProfile(profile);
+                SaveVolumeSettings();
+            };
+            settingsWindow.ProfileSelected += profile =>
+            {
+                savedSettings.ActiveThemeProfileId = profile.Id;
+                savedSettings.ThemeColors = new Dictionary<string, string>(profile.StandardColors);
+                savedSettings.MiniPlayerThemeColors =
+                    new Dictionary<string, string>(profile.MiniPlayerColors);
+                NormalizeThemeColors();
+                settingsWindow.SetPalettes(
+                    savedSettings.ThemeColors,
+                    savedSettings.MiniPlayerThemeColors);
+                settingsWindow.SetActiveProfile(profile);
+                ApplyThemeColors();
+                SaveVolumeSettings();
+            };
+            settingsWindow.ProfileNameChanged += profile =>
+            {
+                if (profile.Id == savedSettings.ActiveThemeProfileId)
+                {
+                    settingsWindow.SetActiveProfile(profile);
+                }
+
+                SaveVolumeSettings();
+            };
+            settingsWindow.ProfileDeleteRequested += profile =>
+            {
+                MessageBoxResult result = MessageBox.Show(
+                    $"Delete the profile \"{profile.Name}\"?",
+                    "Delete colour profile",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (result != MessageBoxResult.Yes)
+                {
+                    return;
+                }
+
+                savedSettings.ThemeProfiles.Remove(profile);
+                settingsWindow.Profiles.Remove(profile);
+                if (savedSettings.ActiveThemeProfileId == profile.Id)
+                {
+                    savedSettings.ActiveThemeProfileId = null;
+                    settingsWindow.SetActiveProfile(null);
+                }
+
+                SaveVolumeSettings();
+            };
             settingsWindow.PaletteSelectionChanged += isMiniPlayerPalette =>
             {
                 if (isMiniPlayerPalette != isMiniPlayerEnabled)
@@ -1821,6 +1926,16 @@ namespace Audiocal
                     ? savedSettings.MiniPlayerThemeColors
                     : savedSettings.ThemeColors;
                 palette[key] = hex;
+                ThemeColorProfile? activeProfile = savedSettings.ThemeProfiles.FirstOrDefault(
+                    profile => profile.Id == savedSettings.ActiveThemeProfileId);
+                if (activeProfile != null)
+                {
+                    Dictionary<string, string> profilePalette = isMiniPlayerPalette
+                        ? activeProfile.MiniPlayerColors
+                        : activeProfile.StandardColors;
+                    profilePalette[key] = hex;
+                }
+
                 ApplyThemeColor(key, color, isMiniPlayerPalette);
                 SaveVolumeSettings();
             };
@@ -3611,6 +3726,8 @@ namespace Audiocal
             public string? YtDlpPath { get; set; }
             public Dictionary<string, string> ThemeColors { get; set; } = new();
             public Dictionary<string, string> MiniPlayerThemeColors { get; set; } = new();
+            public List<ThemeColorProfile> ThemeProfiles { get; set; } = new();
+            public Guid? ActiveThemeProfileId { get; set; }
             public AudioSpectrumOptions AudioSpectrum { get; set; } = new();
             public bool PreAnalyzeAudioOnPlay { get; set; } = true;
         }
