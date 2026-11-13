@@ -48,7 +48,6 @@ namespace Audiocal
 
         private bool isDraggingSlider = false;
         private bool isDraggingVolumeSlider = false;
-        private bool isPlaylistModeEnabled;
         private bool isPlaylistDownloadInProgress;
         private bool isMiniPlayerEnabled;
         private bool isMiniPlayerPinned;
@@ -2019,12 +2018,59 @@ namespace Audiocal
             {
                 ApplyThemeColor(key, savedSettings.ThemeColors[key]);
             }
+            settingsWindow.PathsApplyRequested += ChangeStoragePaths;
             settingsWindow.ProfilesImportRequested += ImportThemeProfiles;
             settingsWindow.ProfilesExportRequested += ExportThemeProfiles;
-            settingsWindow.PathsApplyRequested += ChangeStoragePaths;
             settingsWindow.Closed += (_, _) => rootFolderSettingsWindow = null;
             PositionSettingsWindow(settingsWindow);
             settingsWindow.Show();
+        }
+        private async void ImportPlaylistMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (currentLibraryFolder == null)
+            {
+                ShowDownloadStatus("Select a library first");
+                return;
+            }
+
+            if (isPlaylistDownloadInProgress)
+            {
+                ShowDownloadStatus("A download is already in progress");
+                return;
+            }
+
+            var importWindow = new ImportPlaylistWindow
+            {
+                Owner = this
+            };
+            PositionSettingsWindow(importWindow);
+            if (importWindow.ShowDialog() != true)
+            {
+                return;
+            }
+
+            isPlaylistDownloadInProgress = true;
+            string downloadUrl = importWindow.Url;
+            ShowDownloadProgress(IsYouTubePlaylistUrl(downloadUrl)
+                ? "Downloading playlist..."
+                : "Downloading song...");
+            try
+            {
+                await DownloadWithYtDlp(downloadUrl, currentLibraryFolder);
+            }
+            catch (Exception exception) when (
+                exception is IOException or
+                UnauthorizedAccessException or
+                InvalidOperationException or
+                System.ComponentModel.Win32Exception)
+            {
+                PlaylistDownloadProgressBar.Visibility = Visibility.Collapsed;
+                ShowDownloadStatus($"Download failed: {exception.Message}");
+            }
+            finally
+            {
+                isPlaylistDownloadInProgress = false;
+            }
         }
         private bool ChangeStoragePaths(string rootFolder, string ytDlpPath)
         {
@@ -2078,52 +2124,6 @@ namespace Audiocal
                 return false;
             }
         }
-        private string? ResolveYtDlpPath()
-        {
-            if (!string.IsNullOrWhiteSpace(savedSettings.YtDlpPath) &&
-                File.Exists(savedSettings.YtDlpPath))
-            {
-                return Path.GetFullPath(savedSettings.YtDlpPath);
-            }
-
-            string? savedDirectory = Path.GetDirectoryName(savedSettings.YtDlpPath ?? "");
-            var fileDialog = new OpenFileDialog
-            {
-                Title = "Locate yt-dlp.exe",
-                Filter = "yt-dlp executable (yt-dlp.exe)|yt-dlp.exe|Executable files (*.exe)|*.exe|All files (*.*)|*.*",
-                CheckFileExists = true,
-                FileName = "yt-dlp.exe"
-            };
-            if (!string.IsNullOrWhiteSpace(savedDirectory) && Directory.Exists(savedDirectory))
-            {
-                fileDialog.InitialDirectory = savedDirectory;
-            }
-
-            if (fileDialog.ShowDialog(this) != true)
-            {
-                ShowDownloadStatus("Choose yt-dlp.exe to use YouTube features");
-                return null;
-            }
-
-            savedSettings.YtDlpPath = Path.GetFullPath(fileDialog.FileName);
-            SaveVolumeSettings();
-            return savedSettings.YtDlpPath;
-        }
-        private void PositionSettingsWindow(Window settingsWindow)
-        {
-            Rect workArea = SystemParameters.WorkArea;
-            double settingsLeft = Left + ActualWidth;
-            if (settingsLeft + settingsWindow.Width > workArea.Right)
-            {
-                settingsLeft = Left - settingsWindow.Width;
-            }
-
-            settingsWindow.Left = Math.Clamp(
-                settingsLeft,
-                workArea.Left,
-                Math.Max(workArea.Left, workArea.Right - settingsWindow.Width));
-            settingsWindow.Top = Math.Clamp(
-                Top + 40,
         private void ExportThemeProfiles(string filePath)
         {
             try
@@ -2262,6 +2262,52 @@ namespace Audiocal
                     MessageBoxImage.Error);
             }
         }
+        private string? ResolveYtDlpPath()
+        {
+            if (!string.IsNullOrWhiteSpace(savedSettings.YtDlpPath) &&
+                File.Exists(savedSettings.YtDlpPath))
+            {
+                return Path.GetFullPath(savedSettings.YtDlpPath);
+            }
+
+            string? savedDirectory = Path.GetDirectoryName(savedSettings.YtDlpPath ?? "");
+            var fileDialog = new OpenFileDialog
+            {
+                Title = "Locate yt-dlp.exe",
+                Filter = "yt-dlp executable (yt-dlp.exe)|yt-dlp.exe|Executable files (*.exe)|*.exe|All files (*.*)|*.*",
+                CheckFileExists = true,
+                FileName = "yt-dlp.exe"
+            };
+            if (!string.IsNullOrWhiteSpace(savedDirectory) && Directory.Exists(savedDirectory))
+            {
+                fileDialog.InitialDirectory = savedDirectory;
+            }
+
+            if (fileDialog.ShowDialog(this) != true)
+            {
+                ShowDownloadStatus("Choose yt-dlp.exe to use YouTube features");
+                return null;
+            }
+
+            savedSettings.YtDlpPath = Path.GetFullPath(fileDialog.FileName);
+            SaveVolumeSettings();
+            return savedSettings.YtDlpPath;
+        }
+        private void PositionSettingsWindow(Window settingsWindow)
+        {
+            Rect workArea = SystemParameters.WorkArea;
+            double settingsLeft = Left + ActualWidth;
+            if (settingsLeft + settingsWindow.Width > workArea.Right)
+            {
+                settingsLeft = Left - settingsWindow.Width;
+            }
+
+            settingsWindow.Left = Math.Clamp(
+                settingsLeft,
+                workArea.Left,
+                Math.Max(workArea.Left, workArea.Right - settingsWindow.Width));
+            settingsWindow.Top = Math.Clamp(
+                Top + 40,
                 workArea.Top,
                 Math.Max(workArea.Top, workArea.Bottom - settingsWindow.Height));
         }
@@ -2930,6 +2976,7 @@ namespace Audiocal
         }
         private async Task DownloadWithYtDlp(string youtubeUrl, string destinationFolder)
         {
+            youtubeUrl = NormalizeYouTubeUrl(youtubeUrl);
             string? ytDlpPath = ResolveYtDlpPath();
             if (ytDlpPath == null)
             {
@@ -3070,65 +3117,6 @@ namespace Audiocal
                 playbackOrderIndex = 0;
             }
         }
-        private async void DownloadButton_Click(object sender, RoutedEventArgs e)
-        {
-            string youtubeUrl = YouTubeUrlTextBox.Text.Trim();
-
-            if (string.IsNullOrWhiteSpace(youtubeUrl))
-            {
-                ShowDownloadStatus("Paste a YouTube URL");
-                return;
-            }
-
-            bool isPlaylist = IsYouTubePlaylistUrl(youtubeUrl);
-            if (isPlaylistModeEnabled && !isPlaylist)
-            {
-                ShowDownloadStatus("Enter a valid YouTube playlist URL");
-                return;
-            }
-            if (currentLibraryFolder == null)
-            {
-                ShowDownloadStatus("Select a library first");
-                return;
-            }
-
-            if (isPlaylistDownloadInProgress)
-            {
-                return;
-            }
-
-            if (isPlaylist)
-            {
-                ShowDownloadProgress("Downloading playlist...");
-            }
-            else
-            {
-                ShowDownloadProgress("Downloading song...");
-            }
-
-            isPlaylistDownloadInProgress = true;
-            try
-            {
-                await DownloadWithYtDlp(
-                    youtubeUrl,
-                    currentLibraryFolder);
-
-                YouTubeUrlTextBox.Clear();
-            }
-            catch (Exception exception) when (
-                exception is IOException or
-                UnauthorizedAccessException or
-                InvalidOperationException or
-                System.ComponentModel.Win32Exception)
-            {
-                PlaylistDownloadProgressBar.Visibility = Visibility.Collapsed;
-                ShowDownloadStatus($"Download failed: {exception.Message}");
-            }
-            finally
-            {
-                isPlaylistDownloadInProgress = false;
-            }
-        }
         private async void YouTubeUrlTextBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             string query = YouTubeUrlTextBox.Text.Trim();
@@ -3142,11 +3130,6 @@ namespace Audiocal
             if (!isAddingYouTubeResult)
             {
                 await StopPreviewAsync(deleteTemporaryFile: true);
-            }
-
-            if (isPlaylistModeEnabled)
-            {
-                return;
             }
 
             if (query.Length < 2 || IsYouTubeUrl(query))
@@ -3171,7 +3154,7 @@ namespace Audiocal
         private void ShowSearchResultsForCurrentQuery()
         {
             string query = YouTubeUrlTextBox.Text.Trim();
-            if (isPlaylistModeEnabled || query.Length < 2 || IsYouTubeUrl(query))
+            if (query.Length < 2 || IsYouTubeUrl(query))
             {
                 return;
             }
@@ -3199,21 +3182,9 @@ namespace Audiocal
         {
             string query = YouTubeUrlTextBox.Text.Trim();
 
-            if (isPlaylistModeEnabled)
-            {
-                if (!IsYouTubePlaylistUrl(query))
-                {
-                    ShowDownloadStatus("Enter a valid YouTube playlist URL");
-                    return;
-                }
-
-                DownloadButton_Click(sender, e);
-                return;
-            }
-
             if (IsYouTubeUrl(query))
             {
-                DownloadButton_Click(sender, e);
+                ShowDownloadStatus("Search for a song by title, or import a playlist from Settings");
                 return;
             }
 
@@ -3457,7 +3428,52 @@ namespace Audiocal
                    (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) &&
                    IsYouTubeHost(uri.Host);
         }
-        private static bool IsYouTubePlaylistUrl(string value)
+        internal static string NormalizeYouTubeUrl(string value)
+        {
+            int radioParameterIndex = value.IndexOf("start_radio=1", StringComparison.Ordinal);
+            if (radioParameterIndex < 0)
+            {
+                return value;
+            }
+
+            int querySeparatorIndex = value.IndexOf('&');
+            return querySeparatorIndex >= 0
+                ? value.Substring(0, querySeparatorIndex)
+                : value;
+        }
+        internal static bool IsYouTubeVideoUrl(string value)
+        {
+            if (!Uri.TryCreate(value, UriKind.Absolute, out Uri? uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+                !IsYouTubeHost(uri.Host))
+            {
+                return false;
+            }
+
+            if (uri.Host.Equals("youtu.be", StringComparison.OrdinalIgnoreCase))
+            {
+                return uri.AbsolutePath.Trim('/').Length > 0;
+            }
+
+            foreach (string parameter in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+            {
+                string[] keyValue = parameter.Split('=', 2);
+                string key = Uri.UnescapeDataString(keyValue[0].Replace('+', ' '));
+                if (key.Equals("v", StringComparison.OrdinalIgnoreCase) &&
+                    keyValue.Length == 2 &&
+                    !string.IsNullOrWhiteSpace(Uri.UnescapeDataString(keyValue[1].Replace('+', ' '))))
+                {
+                    return true;
+                }
+            }
+
+            string[] pathSegments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            return pathSegments.Length >= 2 &&
+                   (pathSegments[0].Equals("shorts", StringComparison.OrdinalIgnoreCase) ||
+                    pathSegments[0].Equals("embed", StringComparison.OrdinalIgnoreCase) ||
+                    pathSegments[0].Equals("live", StringComparison.OrdinalIgnoreCase));
+        }
+        internal static bool IsYouTubePlaylistUrl(string value)
         {
             if (!Uri.TryCreate(value, UriKind.Absolute, out Uri? uri) ||
                 (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
@@ -3488,6 +3504,7 @@ namespace Audiocal
         }
         private async Task PrepareAndPlayPreviewAsync(YouTubeSearchResult result)
         {
+            string videoUrl = NormalizeYouTubeUrl(result.Url);
             string? ytDlpPath = ResolveYtDlpPath();
             if (ytDlpPath == null)
             {
@@ -3532,7 +3549,7 @@ namespace Audiocal
                 startInfo.ArgumentList.Add("mp3");
                 startInfo.ArgumentList.Add("-o");
                 startInfo.ArgumentList.Add(Path.Combine(activePreviewDirectory, "%(id)s.%(ext)s"));
-                startInfo.ArgumentList.Add(result.Url);
+                startInfo.ArgumentList.Add(videoUrl);
 
                 using var process = new Process { StartInfo = startInfo };
                 previewDownloadProcess = process;
@@ -3820,43 +3837,6 @@ namespace Audiocal
             DownloadStatusText.Text = message;
             DownloadStatusText.Visibility = Visibility.Visible;
         }
-        private void PlaylistModeButton_Click(object sender, RoutedEventArgs e)
-        {
-            isPlaylistModeEnabled = !isPlaylistModeEnabled;
-            PlaylistModeButton.Background = isPlaylistModeEnabled
-                ? new SolidColorBrush(Color.FromRgb(38, 58, 50))
-                : Brushes.Transparent;
-            PlaylistModeButton.ToolTip = isPlaylistModeEnabled
-                ? "Playlist download mode: on"
-                : "Playlist download mode: off";
-            YouTubeUrlTextBox.ToolTip = isPlaylistModeEnabled
-                ? "Paste a YouTube playlist URL and press Enter"
-                : "Search for a song or paste a YouTube link";
-            if (PlaylistModeButton.Content is System.Windows.Shapes.Path icon)
-            {
-                icon.Stroke = isPlaylistModeEnabled
-                    ? new SolidColorBrush(Color.FromRgb(67, 217, 163))
-                    : new SolidColorBrush(Color.FromRgb(145, 161, 154));
-            }
-
-            youtubeSearchCancellation?.Cancel();
-            youtubeSearchDebounceTimer.Stop();
-            YouTubeSearchPopup.IsOpen = false;
-            YouTubeSearchResults.ItemsSource = null;
-            YouTubeSearchLoadingPanel.Visibility = Visibility.Collapsed;
-            DownloadStatusText.Visibility = Visibility.Collapsed;
-            if (isPlaylistModeEnabled)
-            {
-                ShowDownloadStatus("Paste a YouTube playlist URL and press Enter");
-            }
-            else if (YouTubeUrlTextBox.Text.Trim().Length >= 2 &&
-                     !IsYouTubeUrl(YouTubeUrlTextBox.Text.Trim()))
-            {
-                pendingYouTubeSearchQuery = YouTubeUrlTextBox.Text.Trim();
-                youtubeSearchDebounceTimer.Start();
-            }
-        }
-
         private sealed class VolumeSettings
         {
             public double Volume { get; set; } = 100;

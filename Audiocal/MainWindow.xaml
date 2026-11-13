@@ -708,6 +708,8 @@
                                   Click="AudioSpectrumSettingsMenuItem_Click"/>
                         <MenuItem Header="Storage paths"
                                   Click="RootFolderMenuItem_Click"/>
+                        <MenuItem Header="Import URL"
+                                  Click="ImportPlaylistMenuItem_Click"/>
                     </MenuItem>
                     <MenuItem Header="Library"
                               x:Name="LibraryMenuItem"
@@ -725,78 +727,23 @@
                                 VerticalAlignment="Center">
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="230"/>
-                                <ColumnDefinition Width="36"/>
+                                <ColumnDefinition Width="266"/>
                             </Grid.ColumnDefinitions>
                             <TextBox x:Name="YouTubeUrlTextBox"
                                      Grid.Column="0"
                                      Height="38"
                                      Style="{StaticResource SearchTextBoxStyle}"
                                      VerticalContentAlignment="Center"
-                                     ToolTip="Search for a song or paste a YouTube link"
+                                     ToolTip="Search for a song"
                                      TextChanged="YouTubeUrlTextBox_TextChanged"
                                      GotKeyboardFocus="YouTubeUrlTextBox_GotKeyboardFocus"
                                      KeyDown="YouTubeUrlTextBox_KeyDown"/>
-                            <Button x:Name="PlaylistModeButton"
-                                    Grid.Column="1"
-                                    Width="32"
-                                    Height="32"
-                                    Margin="4,0,0,0"
-                                    Padding="0"
-                                    Background="Transparent"
-                                    BorderBrush="Transparent"
-                                    ToolTip="Playlist download mode: off"
-                                    Click="PlaylistModeButton_Click">
-                                <Button.Style>
-                                    <Style TargetType="{x:Type Button}">
-                                        <Setter Property="Template">
-                                            <Setter.Value>
-                                                <ControlTemplate TargetType="{x:Type Button}">
-                                                    <Border x:Name="ButtonBackground"
-                                                            Background="{TemplateBinding Background}"
-                                                            CornerRadius="16">
-                                                        <ContentPresenter HorizontalAlignment="Center"
-                                                                          VerticalAlignment="Center"/>
-                                                    </Border>
-                                                    <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter TargetName="ButtonBackground"
-                                                                    Property="Background"
-                                                                    Value="{DynamicResource ControlBackgroundBrush}"/>
-                                                        </Trigger>
-                                                        <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
-                                                                     Value="True">
-                                                            <Setter TargetName="ButtonBackground"
-                                                                    Property="Background"
-                                                                    Value="{DynamicResource ControlBackgroundBrush}"/>
-                                                        </DataTrigger>
-                                                        <Trigger Property="IsPressed" Value="True">
-                                                            <Setter TargetName="ButtonBackground"
-                                                                    Property="Background"
-                                                                    Value="{DynamicResource ControlBorderBrush}"/>
-                                                        </Trigger>
-                                                    </ControlTemplate.Triggers>
-                                                </ControlTemplate>
-                                            </Setter.Value>
-                                        </Setter>
-                                    </Style>
-                                </Button.Style>
-                                <Path Data="M8,12 L14,6 C15.7,4.3 18.3,4.3 20,6 C21.7,7.7 21.7,10.3 20,12 L11,21 C8.5,23.5 4.5,23.5 2,21 C-0.5,18.5 -0.5,14.5 2,12 L12,2"
-                                      Width="16"
-                                      Height="16"
-                                      Stretch="Uniform"
-                                      Stroke="{DynamicResource TextMutedBrush}"
-                                      StrokeThickness="1.8"
-                                      StrokeStartLineCap="Round"
-                                      StrokeEndLineCap="Round"
-                                      StrokeLineJoin="Round"/>
-                            </Button>
                         </Grid>
                     </StackPanel>
                     <StackPanel Grid.Row="1" VerticalAlignment="Center">
                         <ProgressBar x:Name="PlaylistDownloadProgressBar"
                                      Height="4"
-                                     Margin="4,0,38,2"
+                                     Margin="4,0,0,2"
                                      Minimum="0"
                                      Maximum="100"
                                      Value="0"
