@@ -8,6 +8,8 @@ namespace Audiocal
     public partial class RootFolderSettingsWindow : Window
     {
         public event Func<string, string, bool>? PathsApplyRequested;
+        public event Action<string>? ProfilesImportRequested;
+        public event Action<string>? ProfilesExportRequested;
 
         public RootFolderSettingsWindow(string currentRootFolder, string? currentYtDlpPath)
         {
@@ -54,6 +56,39 @@ namespace Audiocal
             {
                 YtDlpPathTextBox.Text = fileDialog.FileName;
                 ErrorText.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void ImportProfilesButton_Click(object sender, RoutedEventArgs e)
+        {
+            var fileDialog = new OpenFileDialog
+            {
+                Title = "Import colour profiles",
+                Filter = "Audiocal colour profiles (*.json)|*.json|JSON files (*.json)|*.json|All files (*.*)|*.*",
+                CheckFileExists = true
+            };
+
+            if (fileDialog.ShowDialog(this) == true)
+            {
+                ProfilesImportRequested?.Invoke(fileDialog.FileName);
+            }
+        }
+
+        private void ExportProfilesButton_Click(object sender, RoutedEventArgs e)
+        {
+            var fileDialog = new SaveFileDialog
+            {
+                Title = "Export colour profiles",
+                Filter = "Audiocal colour profiles (*.json)|*.json|JSON files (*.json)|*.json",
+                DefaultExt = ".json",
+                AddExtension = true,
+                FileName = "Audiocal-colour-profiles.json",
+                OverwritePrompt = true
+            };
+
+            if (fileDialog.ShowDialog(this) == true)
+            {
+                ProfilesExportRequested?.Invoke(fileDialog.FileName);
             }
         }
 

@@ -2019,6 +2019,8 @@ namespace Audiocal
             {
                 ApplyThemeColor(key, savedSettings.ThemeColors[key]);
             }
+            settingsWindow.ProfilesImportRequested += ImportThemeProfiles;
+            settingsWindow.ProfilesExportRequested += ExportThemeProfiles;
             settingsWindow.PathsApplyRequested += ChangeStoragePaths;
             settingsWindow.Closed += (_, _) => rootFolderSettingsWindow = null;
             PositionSettingsWindow(settingsWindow);
@@ -2122,6 +2124,144 @@ namespace Audiocal
                 Math.Max(workArea.Left, workArea.Right - settingsWindow.Width));
             settingsWindow.Top = Math.Clamp(
                 Top + 40,
+        private void ExportThemeProfiles(string filePath)
+        {
+            try
+            {
+                if (savedSettings.ThemeProfiles.Count == 0)
+                {
+                    MessageBox.Show(
+                        "There are no colour profiles to export.",
+                        "Export colour profiles",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    return;
+                }
+
+                string json = JsonSerializer.Serialize(
+                    savedSettings.ThemeProfiles,
+                    new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(filePath, json);
+                MessageBox.Show(
+                    $"Exported {savedSettings.ThemeProfiles.Count} colour profile(s).",
+                    "Export colour profiles",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception exception) when (
+                exception is IOException or
+                UnauthorizedAccessException or
+                ArgumentException or
+                NotSupportedException)
+            {
+                MessageBox.Show(
+                    $"Could not export colour profiles.\n\n{exception.Message}",
+                    "Export colour profiles",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+        private void ImportThemeProfiles(string filePath)
+        {
+            try
+            {
+                string json = File.ReadAllText(filePath);
+                List<ThemeColorProfile>? profiles =
+                    JsonSerializer.Deserialize<List<ThemeColorProfile>>(json);
+                if (profiles == null || profiles.Count == 0)
+                {
+                    throw new InvalidDataException("The selected file contains no colour profiles.");
+                }
+
+                var existingIds = savedSettings.ThemeProfiles
+                    .Select(profile => profile.Id)
+                    .ToHashSet();
+                var profileNames = savedSettings.ThemeProfiles
+                    .Select(profile => profile.Name)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var importedProfiles = new List<ThemeColorProfile>(profiles.Count);
+
+                foreach (ThemeColorProfile? profile in profiles)
+                {
+                    if (profile == null ||
+                        string.IsNullOrWhiteSpace(profile.Name) ||
+                        profile.StandardColors == null ||
+                        profile.MiniPlayerColors == null)
+                    {
+                        throw new InvalidDataException(
+                            "The selected file contains an incomplete colour profile.");
+                    }
+
+                    foreach (string key in ThemeSettingsWindow.DefaultColors.Keys)
+                    {
+                        if (!profile.StandardColors.TryGetValue(key, out string? standardColor) ||
+                            !ThemeSettingsWindow.TryParseColor(standardColor, out _) ||
+                            !profile.MiniPlayerColors.TryGetValue(key, out string? miniPlayerColor) ||
+                            !ThemeSettingsWindow.TryParseColor(miniPlayerColor, out _))
+                        {
+                            throw new InvalidDataException(
+                                $"The colour profile \"{profile.Name}\" contains an invalid or missing colour.");
+                        }
+                    }
+
+                    string name = profile.Name.Trim();
+                    string uniqueName = name;
+                    int suffix = 2;
+                    while (!profileNames.Add(uniqueName))
+                    {
+                        uniqueName = $"{name} ({suffix++})";
+                    }
+
+                    Guid id = profile.Id;
+                    if (id == Guid.Empty || !existingIds.Add(id))
+                    {
+                        do
+                        {
+                            id = Guid.NewGuid();
+                        }
+                        while (!existingIds.Add(id));
+                    }
+
+                    importedProfiles.Add(new ThemeColorProfile(
+                        uniqueName,
+                        new Dictionary<string, string>(profile.StandardColors),
+                        new Dictionary<string, string>(profile.MiniPlayerColors))
+                    {
+                        Id = id
+                    });
+                }
+
+                savedSettings.ThemeProfiles.AddRange(importedProfiles);
+                if (themeSettingsWindow != null)
+                {
+                    foreach (ThemeColorProfile profile in importedProfiles)
+                    {
+                        themeSettingsWindow.Profiles.Add(profile);
+                    }
+                }
+
+                SaveVolumeSettings();
+                MessageBox.Show(
+                    $"Imported {importedProfiles.Count} colour profile(s).",
+                    "Import colour profiles",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception exception) when (
+                exception is IOException or
+                UnauthorizedAccessException or
+                InvalidDataException or
+                JsonException or
+                ArgumentException or
+                NotSupportedException)
+            {
+                MessageBox.Show(
+                    $"Could not import colour profiles.\n\n{exception.Message}",
+                    "Import colour profiles",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
                 workArea.Top,
                 Math.Max(workArea.Top, workArea.Bottom - settingsWindow.Height));
         }
