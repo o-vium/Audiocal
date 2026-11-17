@@ -204,11 +204,17 @@ namespace Audiocal
                 spectrumSettingsSaveTimer.Start();
             };
         }
-        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             if (!Directory.Exists(musicRootFolder))
             {
                 RootFolderMenuItem_Click(this, new RoutedEventArgs());
+            }
+
+            if (!string.IsNullOrWhiteSpace(savedSettings.YtDlpPath) &&
+                File.Exists(savedSettings.YtDlpPath))
+            {
+                await UpdateYtDlpAsync(Path.GetFullPath(savedSettings.YtDlpPath));
             }
         }
         private void MainWindow_SourceInitialized(object? sender, EventArgs e)
@@ -1602,9 +1608,15 @@ namespace Audiocal
                 profile => profile.Id == savedSettings.ActiveThemeProfileId);
             if (activeProfile == null)
             {
-                savedSettings.ActiveThemeProfileId = null;
+                activeProfile = savedSettings.ThemeProfiles.FirstOrDefault(
+                    profile => string.Equals(
+                        profile.Name,
+                        "standard",
+                        StringComparison.OrdinalIgnoreCase));
+                savedSettings.ActiveThemeProfileId = activeProfile?.Id;
             }
-            else
+
+            if (activeProfile != null)
             {
                 savedSettings.ThemeColors = new Dictionary<string, string>(activeProfile.StandardColors);
                 savedSettings.MiniPlayerThemeColors =
@@ -2072,7 +2084,7 @@ namespace Audiocal
                 isPlaylistDownloadInProgress = false;
             }
         }
-        private bool ChangeStoragePaths(string rootFolder, string ytDlpPath)
+        private async Task<bool> ChangeStoragePaths(string rootFolder, string ytDlpPath)
         {
             try
             {
@@ -2080,6 +2092,7 @@ namespace Audiocal
                 string? normalizedYtDlpPath = string.IsNullOrWhiteSpace(ytDlpPath)
                     ? null
                     : Path.GetFullPath(ytDlpPath);
+                bool ytDlpPathChanged = !PathsEqual(savedSettings.YtDlpPath, normalizedYtDlpPath);
                 var newMusicLibrary = new MusicLibrary(normalizedRoot);
                 string? savedLibraryFolder = newMusicLibrary.LibraryFolders.FirstOrDefault(
                     folder => PathsEqual(folder, savedSettings.LibraryFolder));
@@ -2108,6 +2121,13 @@ namespace Audiocal
                 }
 
                 SaveVolumeSettings();
+                if (ytDlpPathChanged &&
+                    normalizedYtDlpPath != null &&
+                    File.Exists(normalizedYtDlpPath))
+                {
+                    await UpdateYtDlpAsync(normalizedYtDlpPath);
+                }
+
                 return true;
             }
             catch (Exception exception) when (
@@ -2262,7 +2282,7 @@ namespace Audiocal
                     MessageBoxImage.Error);
             }
         }
-        private string? ResolveYtDlpPath()
+        private async Task<string?> ResolveYtDlpPathAsync(bool updateAfterSelection = true)
         {
             if (!string.IsNullOrWhiteSpace(savedSettings.YtDlpPath) &&
                 File.Exists(savedSettings.YtDlpPath))
@@ -2291,7 +2311,57 @@ namespace Audiocal
 
             savedSettings.YtDlpPath = Path.GetFullPath(fileDialog.FileName);
             SaveVolumeSettings();
+            if (updateAfterSelection)
+            {
+                await UpdateYtDlpAsync(savedSettings.YtDlpPath);
+            }
+
             return savedSettings.YtDlpPath;
+        }
+        private async Task UpdateYtDlpAsync(string ytDlpPath)
+        {
+            ShowDownloadProgress("Checking for yt-dlp updates...");
+            try
+            {
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = ytDlpPath,
+                    WorkingDirectory = Path.GetDirectoryName(ytDlpPath)!,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                };
+                startInfo.ArgumentList.Add("-U");
+
+                using var process = new Process { StartInfo = startInfo };
+                process.Start();
+                Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
+                Task<string> errorTask = process.StandardError.ReadToEndAsync();
+                await process.WaitForExitAsync();
+                string output = await outputTask;
+                string error = await errorTask;
+
+                if (process.ExitCode == 0)
+                {
+                    ShowDownloadStatus("yt-dlp update check complete");
+                    return;
+                }
+
+                string details = string.IsNullOrWhiteSpace(error) ? output.Trim() : error.Trim();
+                ShowDownloadStatus(
+                    string.IsNullOrWhiteSpace(details)
+                        ? $"yt-dlp update failed (exit code {process.ExitCode})"
+                        : $"yt-dlp update failed: {details}");
+            }
+            catch (Exception exception) when (
+                exception is IOException or
+                UnauthorizedAccessException or
+                InvalidOperationException or
+                System.ComponentModel.Win32Exception)
+            {
+                ShowDownloadStatus($"yt-dlp update failed: {exception.Message}");
+            }
         }
         private void PositionSettingsWindow(Window settingsWindow)
         {
@@ -2977,7 +3047,7 @@ namespace Audiocal
         private async Task DownloadWithYtDlp(string youtubeUrl, string destinationFolder)
         {
             youtubeUrl = NormalizeYouTubeUrl(youtubeUrl);
-            string? ytDlpPath = ResolveYtDlpPath();
+            string? ytDlpPath = await ResolveYtDlpPathAsync();
             if (ytDlpPath == null)
             {
                 return;
@@ -3251,7 +3321,7 @@ namespace Audiocal
                 return;
             }
 
-            string? ytDlpPath = ResolveYtDlpPath();
+            string? ytDlpPath = await ResolveYtDlpPathAsync();
             if (ytDlpPath == null)
             {
                 return;
@@ -3505,7 +3575,7 @@ namespace Audiocal
         private async Task PrepareAndPlayPreviewAsync(YouTubeSearchResult result)
         {
             string videoUrl = NormalizeYouTubeUrl(result.Url);
-            string? ytDlpPath = ResolveYtDlpPath();
+            string? ytDlpPath = await ResolveYtDlpPathAsync();
             if (ytDlpPath == null)
             {
                 return;

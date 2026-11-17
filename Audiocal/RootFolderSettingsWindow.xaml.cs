@@ -7,7 +7,7 @@ namespace Audiocal
 {
     public partial class RootFolderSettingsWindow : Window
     {
-        public event Func<string, string, bool>? PathsApplyRequested;
+        public event Func<string, string, Task<bool>>? PathsApplyRequested;
         public event Action<string>? ProfilesImportRequested;
         public event Action<string>? ProfilesExportRequested;
 
@@ -92,7 +92,7 @@ namespace Audiocal
             }
         }
 
-        private void ApplyButton_Click(object sender, RoutedEventArgs e)
+        private async void ApplyButton_Click(object sender, RoutedEventArgs e)
         {
             string rootFolder = RootFolderTextBox.Text.Trim();
             string ytDlpPath = YtDlpPathTextBox.Text.Trim();
@@ -103,7 +103,8 @@ namespace Audiocal
                 return;
             }
 
-            if (PathsApplyRequested?.Invoke(rootFolder, ytDlpPath) == true)
+            if (PathsApplyRequested != null &&
+                await PathsApplyRequested.Invoke(rootFolder, ytDlpPath))
             {
                 Close();
             }
